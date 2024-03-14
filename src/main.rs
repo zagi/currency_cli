@@ -80,3 +80,74 @@ fn main() {
         println!("Or: currency_converter list [base_currency]");
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    async fn fetch_mock_exchange_rate(from: &str, to: &str) -> Result<f64, Box<dyn std::error::Error>> {
+        let mut rates = HashMap::new();
+        rates.insert("USD", 1.0);
+        rates.insert("EUR", 0.9);
+        rates.insert("PLN", 4.0);
+
+        let from_rate = rates.get(from).ok_or("Rate not found for source currency")?;
+        let to_rate = rates.get(to).ok_or("Rate not found for target currency")?;
+
+        Ok(to_rate / from_rate)
+    }
+
+    async fn fetch_mock_all_exchange_rates(base: &str) -> Result<Rates, Box<dyn std::error::Error>> {
+        let mut rates = HashMap::new();
+        rates.insert("USD".to_string(), 1.0);
+        rates.insert("EUR".to_string(), 0.9);
+        rates.insert("PLN".to_string(), 4.0);
+
+        if !rates.contains_key(base) {
+            return Err("Base currency not found".into());
+        }
+
+        Ok(Rates { rates })
+    }
+
+    #[tokio::test]
+    async fn test_exchange_rate_conversion() {
+        let from_currency = "USD";
+        let to_currency = "EUR";
+        let amount = 1.0;
+
+        let rate = fetch_mock_exchange_rate(from_currency, to_currency).await.unwrap();
+        let converted_amount = amount * rate;
+
+        assert_eq!(converted_amount, 0.9);
+    }
+
+    #[tokio::test]
+    async fn test_cache_logic() {
+        let mut cache: HashMap<String, CacheItem> = HashMap::new();
+
+        let from_currency = "USD";
+        let to_currency = "EUR";
+        let amount = 1.0;
+
+        let rate = fetch_mock_exchange_rate(from_currency, to_currency).await.unwrap();
+        cache.insert(from_currency.to_string(), CacheItem { rates: HashMap::from([(to_currency.to_string(), rate)]), timestamp: SystemTime::now() });
+
+        let cached_rate = fetch_exchange_rate(from_currency, to_currency, &mut cache).await.unwrap();
+        let converted_amount = amount * cached_rate;
+
+        assert_eq!(converted_amount, 0.9);
+    }
+
+    #[tokio::test]
+    async fn test_listing_exchange_rates() {
+        let base_currency = "USD";
+        let response = fetch_mock_all_exchange_rates(base_currency).await.unwrap();
+
+        assert_eq!(response.rates.len(), 3);
+        assert_eq!(response.rates.get("EUR"), Some(&0.9));
+        assert_eq!(response.rates.get("PLN"), Some(&4.0));
+        assert_eq!(response.rates.get("USD"), Some(&1.0));
+    }
+}
