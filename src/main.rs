@@ -1,6 +1,6 @@
-use reqwest;
+use {reqwest, reqwest::StatusCode};
 use serde::{Serialize, Deserialize};
-use std::{collections::HashMap, env, time::{Duration, SystemTime}};
+use std::{collections::HashMap, env, time::{Duration, SystemTime}, error::Error};
 use dotenv::dotenv;
 
 #[derive(Serialize, Deserialize)]
@@ -16,7 +16,7 @@ struct CacheItem {
 
 static CACHE_DURATION: Duration = Duration::new(3600, 0); // 1 hour
 
-async fn fetch_exchange_rate(from: &str, to: &str, cache: &mut HashMap<String, CacheItem>) -> Result<f64, Box<dyn std::error::Error>> {
+async fn fetch_exchange_rate(from: &str, to: &str, cache: &mut HashMap<String, CacheItem>) -> Result<f64, Box<dyn Error>> {
     if let Some(cached_item) = cache.get(from) {
         if SystemTime::now().duration_since(cached_item.timestamp)?.as_secs() < CACHE_DURATION.as_secs() {
             if let Some(rate) = cached_item.rates.get(to) {
@@ -27,17 +27,31 @@ async fn fetch_exchange_rate(from: &str, to: &str, cache: &mut HashMap<String, C
 
     let api_key = env::var("API_KEY")?;
     let api_url = format!("https://api.exchangerate-api.com/v4/latest/{}?access_key={}", from, api_key);
-    let response: Rates = reqwest::get(api_url).await?.json().await?;
-    cache.insert(from.to_string(), CacheItem { rates: response.rates.clone(), timestamp: SystemTime::now() });
 
-    response.rates.get(to).ok_or_else(|| "Rate not found in response".into()).copied()
+    let response = reqwest::get(&api_url).await?;
+
+    match response.status() {
+        StatusCode::OK => {
+            let rates: Rates = response.json().await?;
+            cache.insert(from.to_string(), CacheItem { rates: rates.rates.clone(), timestamp: SystemTime::now() });
+            rates.rates.get(to).copied().ok_or_else(|| "Rate not found in response".into())
+        }
+        StatusCode::FORBIDDEN => Err("API request limit exceeded".into()),
+        _ => Err(format!("Error fetching exchange rate: {}", response.status()).into()),
+    }
 }
 
-async fn fetch_all_exchange_rates(base: &str) -> Result<Rates, Box<dyn std::error::Error>> {
+async fn fetch_all_exchange_rates(base: &str) -> Result<Rates, Box<dyn Error>> {
     let api_key = env::var("API_KEY")?;
     let api_url = format!("https://api.exchangerate-api.com/v4/latest/{}?access_key={}", base, api_key);
-    let response: Rates = reqwest::get(api_url).await?.json().await?;
-    Ok(response)
+
+    let response = reqwest::get(&api_url).await?;
+
+    match response.status() {
+        StatusCode::OK => Ok(response.json().await?),
+        StatusCode::FORBIDDEN => Err("API request limit exceeded".into()),
+        _ => Err(format!("Error fetching all exchange rates: {}", response.status()).into()),
+    }
 }
 
 fn main() {
@@ -87,10 +101,18 @@ mod tests {
     use std::collections::HashMap;
 
     async fn fetch_mock_exchange_rate(from: &str, to: &str) -> Result<f64, Box<dyn std::error::Error>> {
-        let mut rates = HashMap::new();
-        rates.insert("USD", 1.0);
-        rates.insert("EUR", 0.9);
-        rates.insert("PLN", 4.0);
+        if from == "ERROR" || to == "ERROR" {
+            return Err("Network error or API limit reached".into());
+        }
+        if from == "INVALID" || to == "INVALID" {
+            return Err("Invalid currency code".into());
+        }
+
+        let rates = HashMap::from([
+            ("USD".to_string(), 1.0),
+            ("EUR".to_string(), 0.9),
+            ("PLN".to_string(), 4.0),
+        ]);
 
         let from_rate = rates.get(from).ok_or("Rate not found for source currency")?;
         let to_rate = rates.get(to).ok_or("Rate not found for target currency")?;
@@ -149,5 +171,23 @@ mod tests {
         assert_eq!(response.rates.get("EUR"), Some(&0.9));
         assert_eq!(response.rates.get("PLN"), Some(&4.0));
         assert_eq!(response.rates.get("USD"), Some(&1.0));
+    }
+
+    #[tokio::test]
+    async fn test_network_error_handling() {
+        let result = fetch_mock_exchange_rate("ERROR", "EUR").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_invalid_currency_code_handling() {
+        let result = fetch_mock_exchange_rate("INVALID", "EUR").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_rate_not_found_handling() {
+        let result = fetch_mock_exchange_rate("USD", "INVALID").await;
+        assert!(result.is_err());
     }
 }
