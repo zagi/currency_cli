@@ -1,6 +1,6 @@
 use {reqwest, reqwest::StatusCode};
 use serde::{Serialize, Deserialize};
-use std::{collections::HashMap, env, time::{Duration, SystemTime}, error::Error};
+use std::{collections::HashMap, env, time::{Duration, SystemTime}, error::Error, io};
 use dotenv::dotenv;
 
 #[derive(Serialize, Deserialize)]
@@ -56,7 +56,30 @@ async fn fetch_all_exchange_rates(base: &str) -> Result<Rates, Box<dyn Error>> {
 
 fn main() {
     dotenv().ok();
-    let args: Vec<String> = env::args().collect();
+    let mut args: Vec<String> = env::args().collect();
+
+    if args.len() == 1 {
+        let mut input = String::new();
+
+        println!("Please enter the source currency code (e.g., PLN):");
+        io::stdin().read_line(&mut input).expect("Failed to read line");
+        let from_currency = input.trim().to_uppercase();
+        input.clear();
+
+        println!("Please enter the target currency code (e.g., EUR):");
+        io::stdin().read_line(&mut input).expect("Failed to read line");
+        let to_currency = input.trim().to_uppercase();
+        input.clear();
+
+        println!("Please enter the amount to convert:");
+        io::stdin().read_line(&mut input).expect("Failed to read line");
+        let amount: f64 = input.trim().parse().expect("Please type a number.");
+        input.clear();
+
+        args.push(from_currency);
+        args.push(to_currency);
+        args.push(amount.to_string());
+    }
 
     if args.len() >= 2 && args[1] == "list" {
         let base_currency = if args.len() == 3 { &args[2] } else { "PLN" };
