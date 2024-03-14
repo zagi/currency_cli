@@ -70,14 +70,14 @@ fn main() {
             match fetch_exchange_rate(from_currency, to_currency, &mut cache).await {
                 Ok(rate) => {
                     let converted_amount = amount * rate;
-                    println!("{} {} is {} {}", amount, from_currency, converted_amount, to_currency);
+                    println!("{} {} is {} {} at an exchange rate of {}", amount, from_currency, converted_amount, to_currency, rate);
                 }
                 Err(e) => eprintln!("Error fetching exchange rate: {}", e),
             }
         });
     } else {
-        println!("Usage: currency_converter <from_currency> <to_currency> <amount>");
-        println!("Or: currency_converter list [base_currency]");
+        println!("Usage: currency <from_currency> <to_currency> <amount>");
+        println!("Or: currency list [base_currency]");
     }
 }
 
