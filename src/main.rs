@@ -1,10 +1,12 @@
 use dotenv::dotenv;
 use serde::{Deserialize, Serialize};
+use serde_json;
 use std::{
     collections::HashMap,
     env,
     error::Error,
-    io,
+    fs::File,
+    io::{self, BufReader, BufWriter},
     time::{Duration, SystemTime},
 };
 use {reqwest, reqwest::StatusCode};
@@ -21,6 +23,24 @@ struct CacheItem {
 }
 
 static CACHE_DURATION: Duration = Duration::new(3600, 0); // 1 hour
+const CACHE_FILE: &str = "cache.json";
+
+fn save_cache(cache: &HashMap<String, CacheItem>) -> Result<(), io::Error> {
+    let file = File::create(CACHE_FILE)?;
+    let writer = BufWriter::new(file);
+    serde_json::to_writer(writer, cache)?;
+    Ok(())
+}
+
+fn load_cache() -> Result<HashMap<String, CacheItem>, io::Error> {
+    if let Ok(file) = File::open(CACHE_FILE) {
+        let reader = BufReader::new(file);
+        let cache = serde_json::from_reader(reader)?;
+        Ok(cache)
+    } else {
+        Ok(HashMap::new())
+    }
+}
 
 async fn fetch_exchange_rate(
     from: &str,
@@ -137,20 +157,21 @@ fn main() {
         let to_currency = &args[2];
         let amount: f64 = args[3].parse().expect("Invalid amount");
 
-        let mut cache: HashMap<String, CacheItem> = HashMap::new();
+        let mut cache = load_cache().unwrap_or_else(|_| HashMap::new());
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async {
             match fetch_exchange_rate(from_currency, to_currency, &mut cache).await {
                 Ok(rate) => {
                     let converted_amount = amount * rate;
                     println!(
-                        "{} {} is {} {} at an exchange rate of {}",
+                        "{} {} is {:.2} {} at an exchange rate of {:.2}",
                         amount, from_currency, converted_amount, to_currency, rate
                     );
                 }
                 Err(e) => eprintln!("Error fetching exchange rate: {}", e),
             }
         });
+        save_cache(&cache).expect("Failed to save cache");
     } else {
         println!("Usage: currency <from_currency> <to_currency> <amount>");
         println!("Or: currency list [base_currency]");
