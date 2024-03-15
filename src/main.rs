@@ -115,24 +115,33 @@ fn main() {
         .version("1.0")
         .author("Michal Zagalski")
         .about("Converts currencies and lists exchange rates")
-        .arg(Arg::new("FROM_CURRENCY")
-            .help("The source currency code")
-            .required(false)
-            .index(1))
-        .arg(Arg::new("TO_CURRENCY")
-            .help("The target currency code")
-            .required(false)
-            .index(2))
-        .arg(Arg::new("AMOUNT")
-            .help("The amount to convert")
-            .required(false)
-            .index(3))
+        .arg(
+            Arg::new("FROM_CURRENCY")
+                .help("The source currency code")
+                .required(false)
+                .index(1),
+        )
+        .arg(
+            Arg::new("TO_CURRENCY")
+                .help("The target currency code")
+                .required(false)
+                .index(2),
+        )
+        .arg(
+            Arg::new("AMOUNT")
+                .help("The amount to convert")
+                .required(false)
+                .index(3),
+        )
         .subcommand(
             Command::new("list")
                 .about("Lists exchange rates for a base currency")
-                .arg(Arg::new("BASE_CURRENCY")
-                    .help("The base currency code")
-                    .default_value("PLN")));
+                .arg(
+                    Arg::new("BASE_CURRENCY")
+                        .help("The base currency code")
+                        .default_value("PLN"),
+                ),
+        );
 
     let matches = app.get_matches();
 
@@ -152,13 +161,16 @@ fn main() {
             }
         });
     } else {
-        let from_currency = matches.get_one::<String>("FROM_CURRENCY")
+        let from_currency = matches
+            .get_one::<String>("FROM_CURRENCY")
             .expect("Source currency code is required")
             .to_uppercase();
-        let to_currency = matches.get_one::<String>("TO_CURRENCY")
+        let to_currency = matches
+            .get_one::<String>("TO_CURRENCY")
             .expect("Target currency code is required")
             .to_uppercase();
-        let amount: f64 = matches.get_one::<String>("AMOUNT")
+        let amount: f64 = matches
+            .get_one::<String>("AMOUNT")
             .expect("Amount is required")
             .parse()
             .expect("Please type a number.");
