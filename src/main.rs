@@ -1,3 +1,4 @@
+use clap::{Arg, Command};
 use dotenv::dotenv;
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -105,40 +106,38 @@ async fn fetch_all_exchange_rates(base: &str) -> Result<Rates, Box<dyn Error>> {
 }
 
 fn main() {
-    dotenv().ok();
-    let mut args: Vec<String> = env::args().collect();
-
-    if args.len() == 1 {
-        let mut input = String::new();
-
-        println!("Please enter the source currency code (e.g., PLN):");
-        io::stdin()
-            .read_line(&mut input)
-            .expect("Failed to read line");
-        let from_currency = input.trim().to_uppercase();
-        input.clear();
-
-        println!("Please enter the target currency code (e.g., EUR):");
-        io::stdin()
-            .read_line(&mut input)
-            .expect("Failed to read line");
-        let to_currency = input.trim().to_uppercase();
-        input.clear();
-
-        println!("Please enter the amount to convert:");
-        io::stdin()
-            .read_line(&mut input)
-            .expect("Failed to read line");
-        let amount: f64 = input.trim().parse().expect("Please type a number.");
-        input.clear();
-
-        args.push(from_currency);
-        args.push(to_currency);
-        args.push(amount.to_string());
+    match dotenv() {
+        Ok(_) => println!(".env file loaded"),
+        Err(error) => println!("Warning: Failed to load .env file: {}", error),
     }
 
-    if args.len() >= 2 && args[1] == "list" {
-        let base_currency = if args.len() == 3 { &args[2] } else { "PLN" };
+    let app = Command::new("Currency Converter")
+        .version("1.0")
+        .author("Michal Zagalski")
+        .about("Converts currencies and lists exchange rates")
+        .arg(Arg::new("FROM_CURRENCY")
+            .help("The source currency code")
+            .required(false)
+            .index(1))
+        .arg(Arg::new("TO_CURRENCY")
+            .help("The target currency code")
+            .required(false)
+            .index(2))
+        .arg(Arg::new("AMOUNT")
+            .help("The amount to convert")
+            .required(false)
+            .index(3))
+        .subcommand(
+            Command::new("list")
+                .about("Lists exchange rates for a base currency")
+                .arg(Arg::new("BASE_CURRENCY")
+                    .help("The base currency code")
+                    .default_value("PLN")));
+
+    let matches = app.get_matches();
+
+    if let Some(("list", sub_matches)) = matches.subcommand() {
+        let base_currency = sub_matches.get_one::<String>("BASE_CURRENCY").unwrap();
 
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async {
@@ -152,15 +151,22 @@ fn main() {
                 Err(e) => eprintln!("Error fetching exchange rates: {}", e),
             }
         });
-    } else if args.len() == 4 {
-        let from_currency = &args[1];
-        let to_currency = &args[2];
-        let amount: f64 = args[3].parse().expect("Invalid amount");
+    } else {
+        let from_currency = matches.get_one::<String>("FROM_CURRENCY")
+            .expect("Source currency code is required")
+            .to_uppercase();
+        let to_currency = matches.get_one::<String>("TO_CURRENCY")
+            .expect("Target currency code is required")
+            .to_uppercase();
+        let amount: f64 = matches.get_one::<String>("AMOUNT")
+            .expect("Amount is required")
+            .parse()
+            .expect("Please type a number.");
 
         let mut cache = load_cache().unwrap_or_else(|_| HashMap::new());
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async {
-            match fetch_exchange_rate(from_currency, to_currency, &mut cache).await {
+            match fetch_exchange_rate(&from_currency, &to_currency, &mut cache).await {
                 Ok(rate) => {
                     let converted_amount = amount * rate;
                     println!(
@@ -172,9 +178,6 @@ fn main() {
             }
         });
         save_cache(&cache).expect("Failed to save cache");
-    } else {
-        println!("Usage: currency <from_currency> <to_currency> <amount>");
-        println!("Or: currency list [base_currency]");
     }
 }
 
