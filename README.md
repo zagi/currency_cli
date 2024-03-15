@@ -67,6 +67,46 @@ Or
 ./target/release/currency list <base_currency>
 ```
 
+The clap provides easy help:
+```bash
+./target/release/currency --help
+```
+
+or for list subcommand:
+```bash
+./target/release/currency list --help
+```
+
+## Running with Docker
+
+To build the Docker image, run the following command in the project's root directory:
+
+```bash
+docker build -t currency .
+```
+
+To run the application using Docker, execute:
+```bash
+docker run --rm currency currency <from_currency> <to_currency> <amount>
+```
+
+For listing all available currencies and their current exchange rates using Docker:
+```bash
+docker run --rm currency currency list <base_currency>
+```
+
+Note: I use --rm flag to avoid creating unnecessary containers :) 
+
+The clap provides easy help also when running from docker image:
+```bash
+docker run --rm currency currency --help
+```
+
+or for list subcommand:
+```bash
+docker run --rm currency currency list --help
+```
+
 ## Testing
 
 Run the unit tests with the following command:
