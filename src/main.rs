@@ -2,11 +2,11 @@ mod api;
 mod cache;
 mod config;
 mod models;
+use crate::models::{CacheItem, Rates};
 use api::{fetch_all_exchange_rates, fetch_exchange_rate};
 use cache::{load_cache, save_cache};
 use clap::{Arg, Command};
 use dotenv::dotenv;
-use models::{CacheItem, Rates};
 use std::{collections::HashMap, time::SystemTime};
 
 fn main() {
