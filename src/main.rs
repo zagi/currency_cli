@@ -1,109 +1,13 @@
+mod api;
+mod cache;
+mod config;
+mod models;
+use api::{fetch_all_exchange_rates, fetch_exchange_rate};
+use cache::{load_cache, save_cache};
 use clap::{Arg, Command};
 use dotenv::dotenv;
-use serde::{Deserialize, Serialize};
-use serde_json;
-use std::{
-    collections::HashMap,
-    env,
-    error::Error,
-    fs::File,
-    io::{self, BufReader, BufWriter},
-    time::{Duration, SystemTime},
-};
-use {reqwest, reqwest::StatusCode};
-
-#[derive(Serialize, Deserialize)]
-struct Rates {
-    rates: HashMap<String, f64>,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-struct CacheItem {
-    rates: HashMap<String, f64>,
-    timestamp: SystemTime,
-}
-
-static CACHE_DURATION: Duration = Duration::new(3600, 0); // 1 hour
-const CACHE_FILE: &str = "cache.json";
-
-fn save_cache(cache: &HashMap<String, CacheItem>) -> Result<(), io::Error> {
-    let file = File::create(CACHE_FILE)?;
-    let writer = BufWriter::new(file);
-    serde_json::to_writer(writer, cache)?;
-    Ok(())
-}
-
-fn load_cache() -> Result<HashMap<String, CacheItem>, io::Error> {
-    if let Ok(file) = File::open(CACHE_FILE) {
-        let reader = BufReader::new(file);
-        let cache = serde_json::from_reader(reader)?;
-        Ok(cache)
-    } else {
-        Ok(HashMap::new())
-    }
-}
-
-async fn fetch_exchange_rate(
-    from: &str,
-    to: &str,
-    cache: &mut HashMap<String, CacheItem>,
-) -> Result<f64, Box<dyn Error>> {
-    if let Some(cached_item) = cache.get(from) {
-        if SystemTime::now()
-            .duration_since(cached_item.timestamp)?
-            .as_secs()
-            < CACHE_DURATION.as_secs()
-        {
-            if let Some(rate) = cached_item.rates.get(to) {
-                return Ok(*rate);
-            }
-        }
-    }
-
-    let api_key = env::var("API_KEY")?;
-    let api_url = format!(
-        "https://api.exchangerate-api.com/v4/latest/{}?access_key={}",
-        from, api_key
-    );
-
-    let response = reqwest::get(&api_url).await?;
-
-    match response.status() {
-        StatusCode::OK => {
-            let rates: Rates = response.json().await?;
-            cache.insert(
-                from.to_string(),
-                CacheItem {
-                    rates: rates.rates.clone(),
-                    timestamp: SystemTime::now(),
-                },
-            );
-            rates
-                .rates
-                .get(to)
-                .copied()
-                .ok_or_else(|| "Rate not found in response".into())
-        }
-        StatusCode::FORBIDDEN => Err("API request limit exceeded".into()),
-        _ => Err(format!("Error fetching exchange rate: {}", response.status()).into()),
-    }
-}
-
-async fn fetch_all_exchange_rates(base: &str) -> Result<Rates, Box<dyn Error>> {
-    let api_key = env::var("API_KEY")?;
-    let api_url = format!(
-        "https://api.exchangerate-api.com/v4/latest/{}?access_key={}",
-        base, api_key
-    );
-
-    let response = reqwest::get(&api_url).await?;
-
-    match response.status() {
-        StatusCode::OK => Ok(response.json().await?),
-        StatusCode::FORBIDDEN => Err("API request limit exceeded".into()),
-        _ => Err(format!("Error fetching all exchange rates: {}", response.status()).into()),
-    }
-}
+use models::{CacheItem, Rates};
+use std::{collections::HashMap, time::SystemTime};
 
 fn main() {
     match dotenv() {
